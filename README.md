@@ -16,3 +16,6 @@ Then add histories to the database by
 browser-history-merger path/to/merged.db add browser-id
 ```
 
+# Tips
+The program is a single file `./src/browser_history_merger/__init__.py` and can be used as a script.
+
