@@ -269,8 +269,6 @@ def add_db(
         updating_urls,
     )
     print(f"Wrote {root_cur.rowcount} urls")
-    root_con.commit()
-    print(f"Wrote {root_cur.rowcount} urls")
     logging.info("updated urls in new visits")
     res = cur.execute(select_visit_sql, [visits_time_max])
     new_visits = (
@@ -294,8 +292,6 @@ def add_db(
         """,
         new_visits,
     )
-    print(f"Wrote {root_cur.rowcount} visits")
-    root_con.commit()
     print(f"Wrote {root_cur.rowcount} visits")
     logging.info("added new visits")
 
