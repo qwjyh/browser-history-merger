@@ -3,8 +3,11 @@ import argparse
 import logging
 import socket
 import sqlite3
-from typing import Literal
+from typing import Literal, Tuple
 
+# ref: https://en.wikiversity.org/wiki/Chromium_browsing_history_database
+# Time offset of chromium to unixepoch
+CHROMIUM_TIME_OFFSET = 11644473600 * 1_000_000
 
 def init_db(
     root_con: sqlite3.Connection, root_cur: sqlite3.Cursor, args: argparse.Namespace
@@ -132,6 +135,43 @@ def init_db(
     )
     root_con.commit()
 
+    # cleanup
+    root_con.close()
+
+
+def open_browser_db(database_path: str) -> Tuple[sqlite3.Connection, Literal["firefox", "chromium"]]:
+    dburi = f"file:{database_path}?mode=ro&nolock=1"
+    logging.info(f"DB uri: {dburi}")
+    con = sqlite3.connect(dburi, uri=True)
+    cur = con.cursor()
+
+    logging.debug(f"{con=}")
+    logging.debug(f"{cur=}")
+    try:
+        res = cur.execute(
+            """
+            SELECT
+                *
+            FROM
+                sqlite_master
+            WHERE
+                type='table' AND name='urls'
+            """
+        )
+        res.fetchone()
+    except sqlite3.OperationalError as e:
+        if "unable to open database file" in str(e):
+            # might be firefox
+            logging.debug("Failed to open db while executing SELECT from sqlite_master")
+            dburi = f"file:{database_path}?mode=ro"
+            con = sqlite3.connect(dburi, uri=True)
+            cur = con.cursor()
+        else:
+            raise e
+    db_type = get_db_type(cur)
+    logging.info(f"DB type: {db_type}")
+    return con, db_type
+
 
 def get_db_type(cur: sqlite3.Cursor) -> Literal["firefox", "chromium"]:
     res = cur.execute(
@@ -198,6 +238,14 @@ def convert_firefox_transition_type(transition_type: int) -> int:
             return 0
 
 
+def convert_firefox_datetime_to_choromium(time: str) -> str:
+    """
+    Convert time in Firefox to Chromium format.
+    """
+    num = int(time)
+    return str(num + CHROMIUM_TIME_OFFSET)
+
+
 def add_db(
     root_con: sqlite3.Connection, root_cur: sqlite3.Cursor, args: argparse.Namespace
 ):
@@ -208,18 +256,43 @@ def add_db(
     logging.info(f"Source: {database_path}")
     logging.info(f"Root:   {args.root_db}")
 
-    dburi = f"file:{database_path}?mode=ro&nolock=1"
-    logging.info(f"DB uri: {dburi}")
-    con = sqlite3.connect(dburi, uri=True)
+    con, db_type = open_browser_db(database_path)
     cur = con.cursor()
-
-    db_type = get_db_type(cur)
-    logging.info(f"DB type: {db_type}")
 
     match db_type:
         case "firefox":
-            logging.error("Not implemented")
-            raise RuntimeError("Not implemented")
+            select_url_toupdate_sql = """
+            SELECT
+                moz_places.id,
+                moz_places.url,
+                moz_places.title
+            FROM
+                moz_historyvisits,
+                moz_places
+            WHERE
+                moz_historyvisits.visit_date > (?)
+                AND moz_historyvisits.place_id = moz_places.id
+            """
+            select_visit_sql = """
+            SELECT
+                moz_historyvisits.id,
+                moz_historyvisits.place_id,
+                moz_places.url,
+                moz_places.title,
+                moz_historyvisits.visit_date,
+                moz_historyvisits.from_visit,
+                moz_historyvisits.visit_type
+            FROM
+                moz_historyvisits,
+                moz_places
+            WHERE
+                moz_historyvisits.visit_date > (?)
+                AND moz_historyvisits.place_id = moz_places.id
+            """
+            convert_transition_type = convert_firefox_transition_type
+            # Firefox doesn't have transition_qualifier
+            convert_transition_qualifier = lambda _: None
+            convert_visit_time = convert_firefox_datetime_to_choromium
         case "chromium":
             select_url_toupdate_sql = """
             SELECT
@@ -251,6 +324,7 @@ def add_db(
             """
             convert_transition_type = convert_chromium_transition_type
             convert_transition_qualifier = lambda x: x
+            convert_visit_time = lambda x: x
     res = cur.execute(select_url_toupdate_sql, [visits_time_max])
     updating_urls = (
         (
@@ -278,7 +352,7 @@ def add_db(
             url_id,
             url,
             title,
-            visit_time,
+            convert_visit_time(visit_time),
             from_visit,
             convert_transition_qualifier(transition),
             convert_transition_type(transition),
@@ -322,6 +396,10 @@ def add_db(
     )
     root_con.commit()
     logging.info("Updated browser information")
+
+    # cleanup
+    root_con.close()
+    con.close()
 
 
 def main() -> int:
