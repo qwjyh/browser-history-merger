@@ -270,7 +270,7 @@ def add_db(
                 moz_historyvisits,
                 moz_places
             WHERE
-                moz_historyvisits.visit_date > (?)
+                moz_historyvisits.visit_date > (?) - 11644473600000000
                 AND moz_historyvisits.place_id = moz_places.id
             """
             select_visit_sql = """
@@ -286,7 +286,7 @@ def add_db(
                 moz_historyvisits,
                 moz_places
             WHERE
-                moz_historyvisits.visit_date > (?)
+                moz_historyvisits.visit_date > (?) - 11644473600000000
                 AND moz_historyvisits.place_id = moz_places.id
             """
             convert_transition_type = convert_firefox_transition_type
@@ -382,7 +382,7 @@ def add_db(
         [browser_id],
     )
     (new_urls_time_max,) = res.fetchone()
-    logging.info(f"{new_urls_time_max=}")
+    logging.info(f"{new_urls_time_max=} (in chromium format)")
     root_cur.execute(
         """
         UPDATE
