@@ -31,6 +31,24 @@ Python 3.12 (works with standard libraries only)
 ## Tips
 The program is a single file `./src/browser_history_merger/__init__.py` and can be used as a script.
 
+### Example SQL to see the history
+
+```sql
+SELECT
+	browsers.name,
+	visits.title,
+	visits.url,
+	datetime(visits.visit_time / 1000000 - 11644473600, 'unixepoch')
+FROM
+	visits,
+	browsers
+WHERE
+	visits.browser = browsers.id
+ORDER by
+	visits.visit_time
+	DESC LIMIT 0, 100
+```
+
 ## Todo
 - exporting
   - JSON output
