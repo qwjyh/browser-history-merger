@@ -31,3 +31,8 @@ Python 3.12 (works with standard libraries only)
 ## Tips
 The program is a single file `./src/browser_history_merger/__init__.py` and can be used as a script.
 
+## Todo
+- exporting
+  - JSON output
+  - browser list
+- multiple profiles?
